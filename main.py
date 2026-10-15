@@ -1,4 +1,5 @@
 import requests
+from cli import parse_cli, get_input
 
 ICONS = {
     "☀️": {0},
@@ -20,16 +21,21 @@ def get_location(city):
         "count": 1
     }
 
-    response = requests.get(url, params=params).json()
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException:
+        return None
 
 
-    if "results" in response:
-        result = response["results"][0]
+    if data and "results" in data and data["results"]:
+        result = data["results"][0]
         return {
-            "name": result["name"],
-            "country": result["country"],
-            "latitude": result["latitude"],
-            "longitude": result["longitude"]
+            "name": result.get("name"),
+            "country": result.get("country", ""),
+            "latitude": result.get("latitude"),
+            "longitude": result.get("longitude")
         }
     return None
 
@@ -41,13 +47,17 @@ def get_weather(lat, lon):
         "current_weather": True
     }
 
-    response = requests.get(url, params=params).json()
-    current_weather = response["current_weather"]
-    return {
-       "temperature": current_weather["temperature"],
-       "windspeed": current_weather["windspeed"],
-       "wmo_code": current_weather["weathercode"]
-    }
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        current = response.json().get("current_weather", {})
+        return {
+            "temperature": current.get("temperature"),
+            "windspeed": current.get("windspeed"),
+            "wmo_code": current.get("weathercode")
+        }
+    except requests.RequestException:
+        return None
 
 def get_weather_icon(wmo_code):
     for icon, codes in ICONS.items():
@@ -56,16 +66,14 @@ def get_weather_icon(wmo_code):
     return "❓"
 
 def main():
-    while True:
-        city = input("Enter a city / district name > ").strip().capitalize()
-        if city:
-           break
-        print("Enter a vald location!")
-        
+    args = parse_cli()
 
-    location_data = get_location(city)
+    if not args.city:
+        args=get_input()
+        
+    location_data = get_location(args.city)
     if not location_data:
-        print("City could not ne found")
+        print("City could not be found")
         return
 
     weather = get_weather(location_data["latitude"], location_data["longitude"])
